@@ -26,6 +26,10 @@ extern int riskPercent3 = 10;
 double riskedMoney;
 const double RISK_MULTIPLIER = 0.1;
 
+// Objektum nevek
+string lotObjectName = "Lot";
+string lot1ObjectName = "Lot1";
+
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
 //+------------------------------------------------------------------+
@@ -37,8 +41,9 @@ int init() {
 //| Custom indicator deinitialization function                       |
 //+------------------------------------------------------------------+
 int deinit() {
-  ObjectDelete("lot");
-  ObjectDelete("lot1");
+  // Töröljük az objektumokat
+  ObjectDelete(lotObjectName);
+  ObjectDelete(lot1ObjectName);
   return (0);
 }
 
@@ -47,12 +52,13 @@ int deinit() {
 //+------------------------------------------------------------------+
 int start() {
   DisplayText(
-      "Lot", "Trade with Risk " + IntegerToString(riskPercent1) + "%, " +
-                 IntegerToString(riskPercent2) + "%, " +
-                 IntegerToString(riskPercent3) + "% :",
+      lotObjectName,
+      "Trade with Risk " + IntegerToString(riskPercent1) + "%, " +
+          IntegerToString(riskPercent2) + "%, " +
+          IntegerToString(riskPercent3) + "% :",
       "Arial", 8, indicator_clr1, 90, 10, Position);
 
-  DisplayText("Lot1",
+  DisplayText(lot1ObjectName,
               LotCalculateWithRisk(riskPercent1) + ", " +
                   LotCalculateWithRisk(riskPercent2) + ", " +
                   LotCalculateWithRisk(riskPercent3),
