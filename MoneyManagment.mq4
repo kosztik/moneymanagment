@@ -23,12 +23,17 @@ extern int riskPercent1 = 1;
 extern int riskPercent2 = 5;
 extern int riskPercent3 = 10;
 
+// Új paraméterek a devizapár nevének megjelenítéséhez
+extern int symbolFontSize = 60;
+extern color symbolColor = SlateGray;
+
 double riskedMoney;
 const double RISK_MULTIPLIER = 0.1;
 
 // Objektum nevek
 string lotObjectName = "Lot";
 string lot1ObjectName = "Lot1";
+string symbolObjectName = "SymbolName";
 
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
@@ -44,6 +49,7 @@ int deinit() {
   // Töröljük az objektumokat
   ObjectDelete(lotObjectName);
   ObjectDelete(lot1ObjectName);
+  ObjectDelete(symbolObjectName);
   return (0);
 }
 
@@ -63,6 +69,28 @@ int start() {
                   LotCalculateWithRisk(riskPercent2) + ", " +
                   LotCalculateWithRisk(riskPercent3),
               "Arial", 8, indicator_clr2, 10, 10, Position);
+              
+  // Devizapár nevének megjelenítése
+  string symbolName = Symbol();
+  // Ha tartalmazza a "micro" szót, akkor eltávolítjuk
+  string microStr = "micro";
+  int pos = StringFind(symbolName, microStr);
+  
+  if (pos >= 0) {
+    string result = "";
+    if (pos > 0) {
+      result = StringSubstr(symbolName, 0, pos);
+    }
+    result = result + StringSubstr(symbolName, pos + StringLen(microStr));
+    symbolName = result;
+  }
+  
+  // Bal alsó sarokba írjuk ki (Position = 2 a bal alsó sarok)
+  DisplayText(symbolObjectName, symbolName, "Arial", symbolFontSize, symbolColor, 10, 10, 2);
+  
+  // Beállítjuk, hogy a háttérben legyen
+  ObjectSet(symbolObjectName, OBJPROP_BACK, true);
+  
   return (0);
 }
 
