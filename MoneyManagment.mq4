@@ -1,6 +1,5 @@
-
 #property copyright ""
-#property link      ""
+#property link ""
 
 #property indicator_chart_window
 #property indicator_buffers 2
@@ -13,104 +12,92 @@ extern string comment3 = "For example xm micro accounts where 0.1 lot = 1 micro 
 extern int lotModifier = 10;
 extern int SLinFPips = 400;
 extern bool withLoan = 0;
-extern string comment4 ="Clear arrows";
+extern string comment4 = "Clear arrows";
 extern bool clearArrows = 1;
-extern color indicator_clr1= Gold;
-extern color indicator_clr2= Aqua;
-extern int       Position =1;
+extern color indicator_clr1 = Gold;
+extern color indicator_clr2 = Aqua;
+extern int Position = 1;
+
+// Bemeneti paraméterek a százalékokhoz
+extern int riskPercent1 = 1;
+extern int riskPercent2 = 5;
+extern int riskPercent3 = 10;
 
 double riskedMoney;
+const double RISK_MULTIPLIER = 0.1;
+
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
 //+------------------------------------------------------------------+
-int init()
-  {
-//---- indicators
-   
-//----
-   return(0);
-  }
+int init() {
+  return (0);
+}
+
 //+------------------------------------------------------------------+
 //| Custom indicator deinitialization function                       |
 //+------------------------------------------------------------------+
-int deinit()
-  {
-//----
-   ObjectDelete("lot");
-   ObjectDelete("lot1");
-//----
-   return(0);
-  }
+int deinit() {
+  ObjectDelete("lot");
+  ObjectDelete("lot1");
+  return (0);
+}
+
 //+------------------------------------------------------------------+
 //| Custom indicator iteration function                              |
 //+------------------------------------------------------------------+
-int start()
-  {
-   int    counted_bars=IndicatorCounted();
-//----
-  DisplayText("Lot","Trade with Risk 1%, 2%, 10% :","Arial",8,indicator_clr1,90,10,Position);
-  DisplayText("Lot1",LotCalculate1(1)+", "+LotCalculate1(2)+", "+LotCalculate1(10),"Arial",8,indicator_clr2,10,10,Position);
-//----
-   return(0);
-  }
+int start() {
+  DisplayText(
+      "Lot", "Trade with Risk " + IntegerToString(riskPercent1) + "%, " +
+                 IntegerToString(riskPercent2) + "%, " +
+                 IntegerToString(riskPercent3) + "% :",
+      "Arial", 8, indicator_clr1, 90, 10, Position);
+
+  DisplayText("Lot1",
+              LotCalculateWithRisk(riskPercent1) + ", " +
+                  LotCalculateWithRisk(riskPercent2) + ", " +
+                  LotCalculateWithRisk(riskPercent3),
+              "Arial", 8, indicator_clr2, 10, 10, Position);
+  return (0);
+}
+
 //+------------------------------------------------------------------+
 double LotCalculate() {
-   int ratio;
-   double calculatedLot, accountMoney;
-   // kiszamolom a equity risInPercent százalékát
-   if (withLoan == 1) {
-      accountMoney = AccountEquity();
-   } else {
-      accountMoney = AccountBalance();
-   }
-   riskedMoney = (accountMoney * riskInPercent) / 100;
-   
-   switch ( accountType )                           // Operator header 
-      {                                          // Opening brace
-      case 1: ratio = 100; break;                   // One of the 'case' variations 
-      case 2: ratio = 10;  break;                  // One of the 'case' variations 
-      case 3: ratio = 1;   break;
-      //[default: Operators]                        // Variation without any parameter
-      }   
-      
-   calculatedLot = (0.1*riskedMoney) /(SLinFPips/ratio) ;
-   if (lotModifier>0) calculatedLot = calculatedLot * lotModifier;
-   
-  return( NormalizeDouble(calculatedLot, 2) );    
+  return LotCalculateWithRisk(riskInPercent);
 }
 
+double LotCalculateWithRisk(int riskPercent) {
+  int ratio;
+  double calculatedLot, accountMoney;
 
-double LotCalculate1(int q) {
-   int ratio;
-   double calculatedLot, accountMoney;
-   // kiszamolom a equity risInPercent százalékát
-   if (withLoan == 1) {
-      accountMoney = AccountEquity();
-   } else {
-      accountMoney = AccountBalance();
-   }
-   riskedMoney = (accountMoney * q) / 100;
-   
-   switch ( accountType )                           // Operator header 
-      {                                          // Opening brace
-      case 1: ratio = 100; break;                   // One of the 'case' variations 
-      case 2: ratio = 10;  break;                  // One of the 'case' variations 
-      case 3: ratio = 1;   break;
-      //[default: Operators]                        // Variation without any parameter
-      }   
-      
-   calculatedLot = (0.1*riskedMoney) /(SLinFPips/ratio) ;
-   if (lotModifier>0) calculatedLot = calculatedLot * lotModifier;
-   
-  return( NormalizeDouble(calculatedLot, 2) );    
+  // Calculate risked money based on risk percentage
+  accountMoney = withLoan ? AccountEquity() : AccountBalance();
+  riskedMoney = (accountMoney * riskPercent) / 100;
+
+  switch (accountType) {
+  case 1:
+    ratio = 100;
+    break;
+  case 2:
+    ratio = 10;
+    break;
+  case 3:
+    ratio = 1;
+    break;
+  }
+
+  calculatedLot = (RISK_MULTIPLIER * riskedMoney) / (SLinFPips / ratio);
+  if (lotModifier > 0) calculatedLot = calculatedLot * lotModifier;
+
+  return (NormalizeDouble(calculatedLot, 2));
+}
+
+//+------------------------------------------------------------------+
+void DisplayText(string objname, string objtext, string fontname, int fontsize,
+                 int clr, int x, int y, int Cor) {
+  ObjectCreate(objname, OBJ_LABEL, 0, 0, 0);
+  ObjectSetText(objname, objtext, fontsize, fontname, clr);
+  ObjectSet(objname, OBJPROP_CORNER, Cor);
+  ObjectSet(objname, OBJPROP_XDISTANCE, x);
+  ObjectSet(objname, OBJPROP_YDISTANCE, y);
 }
 //+------------------------------------------------------------------+
-void DisplayText(string objname, string objtext, string fontname, int fontsize, int clr, int x, int y,int Cor)
-   {
-      ObjectCreate(objname,OBJ_LABEL,0,0,0);
-      ObjectSetText(objname,objtext,fontsize,fontname,clr);
-      ObjectSet(objname,OBJPROP_CORNER,Cor);
-      ObjectSet(objname,OBJPROP_XDISTANCE,x);
-      ObjectSet(objname,OBJPROP_YDISTANCE,y);
-   }
-//+------------------------------------------------------------------+   
