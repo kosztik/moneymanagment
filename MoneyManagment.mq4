@@ -27,18 +27,42 @@ extern int riskPercent3 = 10;
 extern int symbolFontSize = 60;
 extern color symbolColor = SlateGray;
 
+// Új paraméter a profit számításához
+extern int targetPips = 500;
+
+// Betűtípus beállítások
+extern string fontName = "Courier New";
+extern int tableFontSize = 8;
+
+// Formázási beállítások
+extern int lotDigits = 2;       // Lot méret tizedesjegyek száma
+extern int profitDigits = 2;    // Profit tizedesjegyek száma
+extern int profitWidth = 8;     // Profit mező szélessége
+
+// Frissítési beállítások
+extern int refreshSeconds = 5;  // Frissítési idő másodpercekben
+
 double riskedMoney;
 const double RISK_MULTIPLIER = 0.1;
 
 // Objektum nevek
-string lotObjectName = "Lot";
-string lot1ObjectName = "Lot1";
+string tableHeaderObjectName = "TableHeader";
+string tableRisk1ObjectName = "TableRisk1";
+string tableRisk2ObjectName = "TableRisk2";
+string tableRisk3ObjectName = "TableRisk3";
 string symbolObjectName = "SymbolName";
+
+// Változók az újraszámolás optimalizálásához
+datetime lastUpdateTime = 0;
+double lastAccountBalance = 0;
+double lastAccountEquity = 0;
 
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
 //+------------------------------------------------------------------+
 int init() {
+  // Első megjelenítés
+  UpdateDisplay();
   return (0);
 }
 
@@ -47,8 +71,10 @@ int init() {
 //+------------------------------------------------------------------+
 int deinit() {
   // Töröljük az objektumokat
-  ObjectDelete(lotObjectName);
-  ObjectDelete(lot1ObjectName);
+  ObjectDelete(tableHeaderObjectName);
+  ObjectDelete(tableRisk1ObjectName);
+  ObjectDelete(tableRisk2ObjectName);
+  ObjectDelete(tableRisk3ObjectName);
   ObjectDelete(symbolObjectName);
   return (0);
 }
@@ -57,18 +83,77 @@ int deinit() {
 //| Custom indicator iteration function                              |
 //+------------------------------------------------------------------+
 int start() {
-  DisplayText(
-      lotObjectName,
-      "Trade with Risk " + IntegerToString(riskPercent1) + "%, " +
-          IntegerToString(riskPercent2) + "%, " +
-          IntegerToString(riskPercent3) + "% :",
-      "Arial", 8, indicator_clr1, 90, 10, Position);
+  // Ellenőrizzük, hogy szükséges-e frissíteni
+  bool needUpdate = false;
+  
+  // Ellenőrizzük, hogy eltelt-e a megadott idő
+  if (TimeCurrent() >= lastUpdateTime + refreshSeconds) {
+    needUpdate = true;
+  }
+  
+  // Ellenőrizzük, hogy változott-e a számla egyenlege vagy tőkéje
+  if (AccountBalance() != lastAccountBalance || 
+      (withLoan && AccountEquity() != lastAccountEquity)) {
+    needUpdate = true;
+  }
+  
+  // Ha szükséges, frissítjük a megjelenítést
+  if (needUpdate) {
+    UpdateDisplay();
+  }
+  
+  return (0);
+}
 
-  DisplayText(lot1ObjectName,
-              LotCalculateWithRisk(riskPercent1) + ", " +
-                  LotCalculateWithRisk(riskPercent2) + ", " +
-                  LotCalculateWithRisk(riskPercent3),
-              "Arial", 8, indicator_clr2, 10, 10, Position);
+//+------------------------------------------------------------------+
+// Frissíti a megjelenítést
+void UpdateDisplay() {
+  // Frissítjük az utolsó frissítés idejét és a számla adatokat
+  lastUpdateTime = TimeCurrent();
+  lastAccountBalance = AccountBalance();
+  lastAccountEquity = AccountEquity();
+  
+  // Táblázat fejléc
+  string headerText = "Risk %  |  Lot Size  |  " + IntegerToString(targetPips) + " pips";
+  DisplayText(tableHeaderObjectName, headerText, fontName, tableFontSize, indicator_clr1, 10, 10, Position);
+  
+  // Lot méretek kiszámítása
+  double lot1 = LotCalculateWithRisk(riskPercent1);
+  double lot2 = LotCalculateWithRisk(riskPercent2);
+  double lot3 = LotCalculateWithRisk(riskPercent3);
+  
+  // Profit kiszámítása
+  double profit1Value = CalculateProfitForPips(lot1);
+  double profit2Value = CalculateProfitForPips(lot2);
+  double profit3Value = CalculateProfitForPips(lot3);
+  
+  // Formázott értékek
+  string lot1Str = FormatDouble(lot1, lotDigits, 8);
+  string lot2Str = FormatDouble(lot2, lotDigits, 8);
+  string lot3Str = FormatDouble(lot3, lotDigits, 8);
+  
+  string profit1Str = FormatDouble(profit1Value, profitDigits, profitWidth);
+  string profit2Str = FormatDouble(profit2Value, profitDigits, profitWidth);
+  string profit3Str = FormatDouble(profit3Value, profitDigits, profitWidth);
+  
+  // Táblázat sorok
+  string risk1Text = StringFormat("%5d%%  |  %s  |  $%s", 
+                     riskPercent1, 
+                     lot1Str, 
+                     profit1Str);
+  DisplayText(tableRisk1ObjectName, risk1Text, fontName, tableFontSize, indicator_clr2, 10, 25, Position);
+  
+  string risk2Text = StringFormat("%5d%%  |  %s  |  $%s", 
+                     riskPercent2, 
+                     lot2Str, 
+                     profit2Str);
+  DisplayText(tableRisk2ObjectName, risk2Text, fontName, tableFontSize, indicator_clr2, 10, 40, Position);
+  
+  string risk3Text = StringFormat("%5d%%  |  %s  |  $%s", 
+                     riskPercent3, 
+                     lot3Str, 
+                     profit3Str);
+  DisplayText(tableRisk3ObjectName, risk3Text, fontName, tableFontSize, indicator_clr2, 10, 55, Position);
               
   // Devizapár nevének megjelenítése
   string symbolName = Symbol();
@@ -86,12 +171,10 @@ int start() {
   }
   
   // Bal alsó sarokba írjuk ki (Position = 2 a bal alsó sarok)
-  DisplayText(symbolObjectName, symbolName, "Arial", symbolFontSize, symbolColor, 10, 10, 2);
+  DisplayText(symbolObjectName, symbolName, fontName, symbolFontSize, symbolColor, 10, 10, 2);
   
   // Beállítjuk, hogy a háttérben legyen
   ObjectSet(symbolObjectName, OBJPROP_BACK, true);
-  
-  return (0);
 }
 
 //+------------------------------------------------------------------+
@@ -123,6 +206,50 @@ double LotCalculateWithRisk(int riskPercent) {
   if (lotModifier > 0) calculatedLot = calculatedLot * lotModifier;
 
   return (NormalizeDouble(calculatedLot, 2));
+}
+
+//+------------------------------------------------------------------+
+double CalculateProfitForPips(double lotSize) {
+  double pipValue = 0.0;
+  
+  // A tényleges lot méret kiszámítása a lotModifier figyelembevételével
+  double actualLotSize = lotSize;
+  if (lotModifier > 0) {
+    actualLotSize = lotSize / lotModifier;
+  }
+  
+  // Pip érték kiszámítása a számlatípus alapján
+  switch (accountType) {
+  case 1: // micro
+    pipValue = 0.10 * actualLotSize; // 0.1 lot = $0.10 per pip
+    break;
+  case 2: // mini
+    pipValue = 1.0 * actualLotSize; // 0.1 lot = $1.00 per pip
+    break;
+  case 3: // standard
+    pipValue = 10.0 * actualLotSize; // 0.1 lot = $10.00 per pip
+    break;
+  }
+  
+  double profit = pipValue * targetPips;
+  
+  return (profit);
+}
+
+//+------------------------------------------------------------------+
+// Segédfüggvény a számok formázásához adott szélességgel
+string FormatDouble(double value, int digits, int width) {
+  string result = DoubleToStr(value, digits);
+  
+  // Ha a szám rövidebb, mint a kívánt szélesség, akkor kiegészítjük szóközökkel
+  int currentLength = StringLen(result);
+  if (currentLength < width) {
+    for (int i = 0; i < width - currentLength; i++) {
+      result = " " + result;
+    }
+  }
+  
+  return result;
 }
 
 //+------------------------------------------------------------------+
