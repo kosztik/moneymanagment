@@ -40,7 +40,7 @@ extern int profitDigits = 2;    // Profit tizedesjegyek száma
 extern int profitWidth = 8;     // Profit mező szélessége
 
 // Frissítési beállítások
-extern int refreshSeconds = 5;  // Frissítési idő másodpercekben
+extern int refreshSeconds = 1800;  // Frissítési idő másodpercekben
 
 double riskedMoney;
 const double RISK_MULTIPLIER = 0.1;
