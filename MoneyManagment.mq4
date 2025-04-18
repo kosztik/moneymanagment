@@ -16,6 +16,7 @@ extern string comment4 = "Clear arrows";
 extern bool clearArrows = 1;
 extern color indicator_clr1 = Gold;
 extern color indicator_clr2 = Aqua;
+extern color positionColor = LightGreen;  // Új szín a pozíciók megjelenítéséhez
 extern int Position = 1;
 
 // Bemeneti paraméterek a százalékokhoz
@@ -51,11 +52,14 @@ string tableRisk1ObjectName = "TableRisk1";
 string tableRisk2ObjectName = "TableRisk2";
 string tableRisk3ObjectName = "TableRisk3";
 string symbolObjectName = "SymbolName";
+string positionHeaderObjectName = "PositionHeader";  // Új objektum a pozíciók fejlécéhez
+string positionInfoObjectName = "PositionInfo";      // Új objektum a pozíciók információihoz
 
 // Változók az újraszámolás optimalizálásához
 datetime lastUpdateTime = 0;
 double lastAccountBalance = 0;
 double lastAccountEquity = 0;
+int lastOrdersTotal = 0;
 
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
@@ -76,6 +80,8 @@ int deinit() {
   ObjectDelete(tableRisk2ObjectName);
   ObjectDelete(tableRisk3ObjectName);
   ObjectDelete(symbolObjectName);
+  ObjectDelete(positionHeaderObjectName);
+  ObjectDelete(positionInfoObjectName);
   return (0);
 }
 
@@ -97,6 +103,11 @@ int start() {
     needUpdate = true;
   }
   
+  // Ellenőrizzük, hogy változott-e a nyitott pozíciók száma
+  if (OrdersTotal() != lastOrdersTotal) {
+    needUpdate = true;
+  }
+  
   // Ha szükséges, frissítjük a megjelenítést
   if (needUpdate) {
     UpdateDisplay();
@@ -112,6 +123,7 @@ void UpdateDisplay() {
   lastUpdateTime = TimeCurrent();
   lastAccountBalance = AccountBalance();
   lastAccountEquity = AccountEquity();
+  lastOrdersTotal = OrdersTotal();
   
   // Táblázat fejléc
   string headerText = "Risk %  |  Lot Size  |  " + IntegerToString(targetPips) + " pips";
@@ -154,6 +166,9 @@ void UpdateDisplay() {
                      lot3Str, 
                      profit3Str);
   DisplayText(tableRisk3ObjectName, risk3Text, fontName, tableFontSize, indicator_clr2, 10, 55, Position);
+  
+  // Pozíciók információinak megjelenítése
+  DisplayPositionInfo();
               
   // Devizapár nevének megjelenítése
   string symbolName = Symbol();
@@ -175,6 +190,49 @@ void UpdateDisplay() {
   
   // Beállítjuk, hogy a háttérben legyen
   ObjectSet(symbolObjectName, OBJPROP_BACK, true);
+}
+
+//+------------------------------------------------------------------+
+// Megjeleníti a nyitott pozíciók információit
+void DisplayPositionInfo() {
+  // Pozíciók fejléce
+  string posHeaderText = "Current Positions  |  Lot Size  |  Est. Profit";
+  DisplayText(positionHeaderObjectName, posHeaderText, fontName, tableFontSize, indicator_clr1, 10, 75, Position);
+  
+  // Összesített lot méret és becsült profit
+  double totalLot = 0;
+  double totalEstimatedProfit = 0;
+  int openPositions = 0;
+  
+  // Végigmegyünk az összes nyitott pozíción
+  for (int i = 0; i < OrdersTotal(); i++) {
+    if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+      // Csak a jelenlegi szimbólumra vonatkozó pozíciókat vesszük figyelembe
+      if (OrderSymbol() == Symbol() && (OrderType() == OP_BUY || OrderType() == OP_SELL)) {
+        totalLot += OrderLots();
+        openPositions++;
+      }
+    }
+  }
+  
+  // Ha nincs nyitott pozíció, akkor ezt jelezzük
+  if (openPositions == 0) {
+    DisplayText(positionInfoObjectName, "No open positions", fontName, tableFontSize, positionColor, 10, 90, Position);
+  } else {
+    // Becsült profit kiszámítása a célpipek alapján
+    totalEstimatedProfit = CalculateProfitForPips(totalLot);
+    
+    // Formázott értékek
+    string totalLotStr = FormatDouble(totalLot, lotDigits, 8);
+    string totalProfitStr = FormatDouble(totalEstimatedProfit, profitDigits, profitWidth);
+    
+    // Pozíciók információinak megjelenítése
+    string posInfoText = StringFormat("%d positions  |  %s  |  $%s", 
+                         openPositions, 
+                         totalLotStr, 
+                         totalProfitStr);
+    DisplayText(positionInfoObjectName, posInfoText, fontName, tableFontSize, positionColor, 10, 90, Position);
+  }
 }
 
 //+------------------------------------------------------------------+
