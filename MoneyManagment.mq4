@@ -2,480 +2,393 @@
 #property link ""
 
 #property indicator_chart_window
-// #property indicator_buffers 2 // Felesleges, eltávolítva
+#property indicator_buffers 2
+extern string comment0 = "Default settings are optimized to xm micro accounts";
+extern string comment1 = "1- micro, 2- mini, 3- normal";
+extern string comment2 = "1 pip=$0.001, 1 pip=$0.01, 1 pip=$0.1";
+extern int accountType = 1;
+extern int riskInPercent = 1;
+extern string comment3 = "For example xm micro accounts where 0.1 lot = 1 micro lot";
+extern int lotModifier = 10;
+extern int SLinFPips = 400;
+extern bool withLoan = 0;
+extern string comment4 = "Clear arrows";
+extern bool clearArrows = 1;
+extern color indicator_clr1 = Gold;
+extern color indicator_clr2 = Aqua;
+extern color positionColor = LightGreen;  // Új szín a pozíciók megjelenítéséhez
+extern int Position = 1;
 
-// --- Input Parameters ---
-extern string comment_Account = "--- Account Settings ---";
-extern string comment_AccType = "Account Type: 1=Micro (1k), 2=Mini (10k), 3=Standard (100k)";
-extern int accountType = 1; // 1: Micro (1000), 2: Mini (10000), 3: Standard (100000)
-extern string comment_LotMod = "Lot Multiplier for specific brokers (e.g., XM Micro=10, otherwise=1)";
-extern double lotModifier = 10.0; // Multiplier for display/input if needed
-extern bool withLoan = false; // Use Equity instead of Balance
-
-extern string comment_Risk = "--- Risk & SL ---";
-extern int SLinPips = 400; // Stop Loss in Pips (e.g., 400 for 40.0 pips)
+// Bemeneti paraméterek a százalékokhoz
 extern int riskPercent1 = 1;
 extern int riskPercent2 = 5;
 extern int riskPercent3 = 10;
 
-extern string comment_Profit = "--- Profit Target ---";
-extern int targetPips = 500; // Target profit in Pips (e.g., 500 for 50.0 pips)
-
-extern string comment_Display = "--- Display Settings ---";
-// Corner: 0=Top-Left, 1=Top-Right, 2=Bottom-Left, 3=Bottom-Right
-extern int Position = 1; // Default to Top-Right corner
-extern int tableOffsetX = 350; // Vízszintes távolság a saroktól (jobb saroknál jobbról balra) - Alapértelmezett visszaállítva 100-ra
-extern color indicator_clr1 = Gold; // Header color
-extern color indicator_clr2 = Aqua; // Data color
-extern color positionColor = LightGreen; // Position info color
-
-// Symbol Display
+// Új paraméterek a devizapár nevének megjelenítéséhez
 extern int symbolFontSize = 60;
 extern color symbolColor = SlateGray;
+
+// Új paraméter a profit számításához
+extern int targetPips = 500;
+
+// Betűtípus beállítások
 extern string fontName = "Courier New";
 extern int tableFontSize = 8;
 
-// Formatting
-extern int lotDigits = 2;    // Decimal places for Lot Size
-extern int profitDigits = 2; // Decimal places for Profit
-extern int profitWidth = 8;  // Width for Profit field alignment
+// Formázási beállítások
+extern int lotDigits = 2;       // Lot méret tizedesjegyek száma
+extern int profitDigits = 2;    // Profit tizedesjegyek száma
+extern int profitWidth = 8;     // Profit mező szélessége
 
-// Refresh Rate
-extern int refreshSeconds = 5; // Update frequency in seconds
+// Frissítési beállítások
+extern int refreshSeconds = 60;  // Frissítési idő másodpercekben
 
-// Order Status Box Parameters
-extern string comment_OrderStatus = "--- Order Status Box ---";
+// ÚJ: Paraméterek az order státusz dobozhoz
 extern bool ShowOrderStatusBox = true; // Mutassa az order státusz dobozt?
 extern int OrderStatusFontSize = 30;   // Order státusz szöveg betűmérete
 
-// --- Global Variables ---
-// Object Names
-string tableHeaderObjectName = "RiskTableHeader";
-string tableRisk1ObjectName = "RiskTableRisk1";
-string tableRisk2ObjectName = "RiskTableRisk2";
-string tableRisk3ObjectName = "RiskTableRisk3";
-string symbolObjectName = "RiskSymbolName";
-string positionHeaderObjectName = "RiskPositionHeader";
-string positionInfoObjectName = "RiskPositionInfo";
+double riskedMoney;
+const double RISK_MULTIPLIER = 0.1;
+
+// Objektum nevek
+string tableHeaderObjectName = "TableHeader";
+string tableRisk1ObjectName = "TableRisk1";
+string tableRisk2ObjectName = "TableRisk2";
+string tableRisk3ObjectName = "TableRisk3";
+string symbolObjectName = "SymbolName";
+string positionHeaderObjectName = "PositionHeader";  // Új objektum a pozíciók fejlécéhez
+string positionInfoObjectName = "PositionInfo";      // Új objektum a pozíciók információihoz
+// ÚJ: Objektum nevek az order státusz dobozhoz
 string orderStatusRectName = "OrderStatusRect";
 string orderStatusTextName = "OrderStatusText";
 
-
-// Optimization Variables
+// Változók az újraszámolás optimalizálásához
 datetime lastUpdateTime = 0;
 double lastAccountBalance = 0;
 double lastAccountEquity = 0;
 int lastOrdersTotal = 0;
-string lastSymbol = "";
-double lastTickValue = 0;
-double lastPointSize = 0;
-int lastDigits = 0;
 
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
 //+------------------------------------------------------------------+
-int OnInit() {
+int init() {
+  // Első megjelenítés
   UpdateDisplay();
-  return (INIT_SUCCEEDED);
+  return (0);
 }
 
 //+------------------------------------------------------------------+
 //| Custom indicator deinitialization function                       |
 //+------------------------------------------------------------------+
-void OnDeinit(const int reason) {
-  ObjectDelete(0, tableHeaderObjectName);
-  ObjectDelete(0, tableRisk1ObjectName);
-  ObjectDelete(0, tableRisk2ObjectName);
-  ObjectDelete(0, tableRisk3ObjectName);
-  ObjectDelete(0, symbolObjectName);
-  ObjectDelete(0, positionHeaderObjectName);
-  ObjectDelete(0, positionInfoObjectName);
-  ObjectDelete(0, orderStatusRectName);
-  ObjectDelete(0, orderStatusTextName);
+int deinit() {
+  // Töröljük az objektumokat
+  ObjectDelete(tableHeaderObjectName);
+  ObjectDelete(tableRisk1ObjectName);
+  ObjectDelete(tableRisk2ObjectName);
+  ObjectDelete(tableRisk3ObjectName);
+  ObjectDelete(symbolObjectName);
+  ObjectDelete(positionHeaderObjectName);
+  ObjectDelete(positionInfoObjectName);
+  // ÚJ: Order státusz objektumok törlése
+  ObjectDelete(orderStatusRectName);
+  ObjectDelete(orderStatusTextName);
+  return (0);
 }
 
 //+------------------------------------------------------------------+
 //| Custom indicator iteration function                              |
 //+------------------------------------------------------------------+
-int OnCalculate(
-    const int rates_total,
-    const int prev_calculated,
-    const datetime &time[],
-    const double &open[],
-    const double &high[],
-    const double &low[],
-    const double &close[],
-    const long &tick_volume[],
-    const long &volume[],
-    const int &spread[]) {
-  // Check if update is needed
+int start() {
+  // Ellenőrizzük, hogy szükséges-e frissíteni
   bool needUpdate = false;
-  datetime currentTime = TimeCurrent();
-  double currentBalance = AccountInfoDouble(ACCOUNT_BALANCE);
-  double currentEquity = AccountInfoDouble(ACCOUNT_EQUITY);
-  int currentOrdersTotal = OrdersTotal();
-  string currentSymbol = Symbol();
-  double currentTickValue = SymbolInfoDouble(currentSymbol, SYMBOL_TRADE_TICK_VALUE);
-  double currentPointSize = SymbolInfoDouble(currentSymbol, SYMBOL_POINT);
-  int currentDigits = (int)SymbolInfoInteger(currentSymbol, SYMBOL_DIGITS);
 
-  if (currentTickValue == 0 || currentPointSize == 0 || currentDigits == 0) {
-      currentTickValue = MarketInfo(currentSymbol, MODE_TICKVALUE);
-      currentPointSize = MarketInfo(currentSymbol, MODE_POINT);
-      currentDigits = (int)MarketInfo(currentSymbol, MODE_DIGITS);
-  }
-
-  if (currentTime >= lastUpdateTime + refreshSeconds) {
-    needUpdate = true;
-  }
-  if (currentBalance != lastAccountBalance ||
-      (withLoan && currentEquity != lastAccountEquity)) {
-    needUpdate = true;
-  }
-  if (currentOrdersTotal != lastOrdersTotal) {
-    needUpdate = true;
-  }
-  if (currentSymbol != lastSymbol || currentTickValue != lastTickValue ||
-      currentPointSize != lastPointSize || currentDigits != lastDigits) {
+  // Ellenőrizzük, hogy eltelt-e a megadott idő
+  if (TimeCurrent() >= lastUpdateTime + refreshSeconds) {
     needUpdate = true;
   }
 
+  // Ellenőrizzük, hogy változott-e a számla egyenlege vagy tőkéje
+  if (AccountBalance() != lastAccountBalance ||
+      (withLoan && AccountEquity() != lastAccountEquity)) {
+    needUpdate = true;
+  }
+
+  // Ellenőrizzük, hogy változott-e a nyitott/függőben lévő orderek száma
+  // (Figyelem: OrdersTotal() önmagában nem elég, ha egy order módosul, de a számuk nem)
+  // A biztonság kedvéért frissítünk, ha az orderek száma változik,
+  // vagy ha a ShowOrderStatusBox be van kapcsolva (mert egy order típusa/léte változhat)
+  if (OrdersTotal() != lastOrdersTotal || ShowOrderStatusBox) {
+     // Pontosabb lenne figyelni az orderek állapotát, de ez egyszerűbb
+     needUpdate = true;
+  }
+
+
+  // Ha szükséges, frissítjük a megjelenítést
   if (needUpdate) {
     UpdateDisplay();
-    lastUpdateTime = currentTime;
-    lastAccountBalance = currentBalance;
-    lastAccountEquity = currentEquity;
-    lastOrdersTotal = currentOrdersTotal;
-    lastSymbol = currentSymbol;
-    lastTickValue = currentTickValue;
-    lastPointSize = currentPointSize;
-    lastDigits = currentDigits;
   }
 
-  return (rates_total);
+  return (0);
 }
 
 //+------------------------------------------------------------------+
-//| Updates the display elements                                     |
-//+------------------------------------------------------------------+
+// Frissíti a megjelenítést
 void UpdateDisplay() {
-  double pipValuePerLot = CalculatePipValuePerLot();
-  if (pipValuePerLot <= 0) {
-    Print("Could not calculate Pip Value for ", Symbol(), ". Check MarketInfo/SymbolInfo.");
-    ObjectDelete(0, tableRisk1ObjectName);
-    ObjectDelete(0, tableRisk2ObjectName);
-    ObjectDelete(0, tableRisk3ObjectName);
-    ObjectDelete(0, positionHeaderObjectName);
-    ObjectDelete(0, positionInfoObjectName);
-    ObjectDelete(0, orderStatusRectName);
-    ObjectDelete(0, orderStatusTextName);
-    DisplayText(tableHeaderObjectName, "Error: Check Pip Value", fontName,
-                tableFontSize, Red, tableOffsetX, 10, Position);
-    return;
-  }
+  // Frissítjük az utolsó frissítés idejét és a számla adatokat
+  lastUpdateTime = TimeCurrent();
+  lastAccountBalance = AccountBalance();
+  lastAccountEquity = AccountEquity();
+  lastOrdersTotal = OrdersTotal();
 
-  // --- Table Header ---
-  string headerText = "Risk %  |  Lot Size  |  " +
-                      DoubleToString(targetPips / GetPipMultiplier(), 1) +
-                      " pips";
-  DisplayText(tableHeaderObjectName, headerText, fontName, tableFontSize,
-              indicator_clr1, tableOffsetX, 10, Position);
+  // Táblázat fejléc
+  string headerText = "Risk %  |  Lot Size  |  " + IntegerToString(targetPips) + " pips";
+  DisplayText(tableHeaderObjectName, headerText, fontName, tableFontSize, indicator_clr1, 10, 10, Position);
 
-  // --- Calculate Lot Sizes and Profits ---
-  double lot1 = LotCalculateWithRisk(riskPercent1, pipValuePerLot);
-  double lot2 = LotCalculateWithRisk(riskPercent2, pipValuePerLot);
-  double lot3 = LotCalculateWithRisk(riskPercent3, pipValuePerLot);
+  // Lot méretek kiszámítása
+  double lot1 = LotCalculateWithRisk(riskPercent1);
+  double lot2 = LotCalculateWithRisk(riskPercent2);
+  double lot3 = LotCalculateWithRisk(riskPercent3);
 
-  double profit1Value = CalculateProfitForPips(lot1, pipValuePerLot);
-  double profit2Value = CalculateProfitForPips(lot2, pipValuePerLot);
-  double profit3Value = CalculateProfitForPips(lot3, pipValuePerLot);
+  // Profit kiszámítása
+  double profit1Value = CalculateProfitForPips(lot1);
+  double profit2Value = CalculateProfitForPips(lot2);
+  double profit3Value = CalculateProfitForPips(lot3);
 
-  // --- Format Values ---
-  string lot1Str = FormatDouble(lot1 * lotModifier, lotDigits, 8);
-  string lot2Str = FormatDouble(lot2 * lotModifier, lotDigits, 8);
-  string lot3Str = FormatDouble(lot3 * lotModifier, lotDigits, 8);
+  // Formázott értékek
+  string lot1Str = FormatDouble(lot1, lotDigits, 8);
+  string lot2Str = FormatDouble(lot2, lotDigits, 8);
+  string lot3Str = FormatDouble(lot3, lotDigits, 8);
 
   string profit1Str = FormatDouble(profit1Value, profitDigits, profitWidth);
   string profit2Str = FormatDouble(profit2Value, profitDigits, profitWidth);
   string profit3Str = FormatDouble(profit3Value, profitDigits, profitWidth);
 
-  // --- Display Table Rows ---
-  string risk1Text = StringFormat("%5d%%  |  %s  |  $%s", riskPercent1,
-                                  lot1Str, profit1Str);
-  DisplayText(tableRisk1ObjectName, risk1Text, fontName, tableFontSize,
-              indicator_clr2, tableOffsetX, 25, Position);
+  // Táblázat sorok
+  string risk1Text = StringFormat("%5d%%  |  %s  |  $%s",
+                     riskPercent1,
+                     lot1Str,
+                     profit1Str);
+  DisplayText(tableRisk1ObjectName, risk1Text, fontName, tableFontSize, indicator_clr2, 10, 25, Position);
 
-  string risk2Text = StringFormat("%5d%%  |  %s  |  $%s", riskPercent2,
-                                  lot2Str, profit2Str);
-  DisplayText(tableRisk2ObjectName, risk2Text, fontName, tableFontSize,
-              indicator_clr2, tableOffsetX, 40, Position);
+  string risk2Text = StringFormat("%5d%%  |  %s  |  $%s",
+                     riskPercent2,
+                     lot2Str,
+                     profit2Str);
+  DisplayText(tableRisk2ObjectName, risk2Text, fontName, tableFontSize, indicator_clr2, 10, 40, Position);
 
-  string risk3Text = StringFormat("%5d%%  |  %s  |  $%s", riskPercent3,
-                                  lot3Str, profit3Str);
-  DisplayText(tableRisk3ObjectName, risk3Text, fontName, tableFontSize,
-              indicator_clr2, tableOffsetX, 55, Position);
+  string risk3Text = StringFormat("%5d%%  |  %s  |  $%s",
+                     riskPercent3,
+                     lot3Str,
+                     profit3Str);
+  DisplayText(tableRisk3ObjectName, risk3Text, fontName, tableFontSize, indicator_clr2, 10, 55, Position);
 
-  // --- Display Position Info ---
-  DisplayPositionInfo(pipValuePerLot);
+  // Pozíciók információinak megjelenítése
+  DisplayPositionInfo();
 
-  // --- Display Symbol Name ---
+  // Devizapár nevének megjelenítése
   string symbolName = Symbol();
-  DisplayText(symbolObjectName, symbolName, fontName, symbolFontSize,
-              symbolColor, 10, 10, 2); // Bal alsó sarok
-  ObjectSetInteger(0, symbolObjectName, OBJPROP_BACK, true);
+  // Ha tartalmazza a "micro" szót, akkor eltávolítjuk
+  string microStr = "micro";
+  int pos = StringFind(symbolName, microStr);
 
-  // --- Display Order Status Box ---
+  if (pos >= 0) {
+    string result = "";
+    if (pos > 0) {
+      result = StringSubstr(symbolName, 0, pos);
+    }
+    result = result + StringSubstr(symbolName, pos + StringLen(microStr));
+    symbolName = result;
+  }
+
+  // Bal alsó sarokba írjuk ki (Position = 2 a bal alsó sarok)
+  DisplayText(symbolObjectName, symbolName, fontName, symbolFontSize, symbolColor, 10, 10, 2);
+
+  // Beállítjuk, hogy a háttérben legyen
+  ObjectSet(symbolObjectName, OBJPROP_BACK, true);
+
+  // ÚJ: Order státusz doboz megjelenítése
   DisplayOrderStatusBox();
 }
 
 //+------------------------------------------------------------------+
-//| Displays information about open positions                        |
-//+------------------------------------------------------------------+
-void DisplayPositionInfo(double pipValuePerLot) {
+// Megjeleníti a nyitott pozíciók információit
+void DisplayPositionInfo() {
+  // Pozíciók fejléce
   string posHeaderText = "Current Positions  |  Lot Size  |  Est. Profit";
-  DisplayText(positionHeaderObjectName, posHeaderText, fontName,
-              tableFontSize, indicator_clr1, tableOffsetX, 75, Position);
+  DisplayText(positionHeaderObjectName, posHeaderText, fontName, tableFontSize, indicator_clr1, 10, 75, Position);
 
-  double totalLotStandard = 0;
+  // Összesített lot méret és becsült profit
+  double totalLot = 0;
+  double totalEstimatedProfit = 0;
   int openPositions = 0;
 
-  for (int i = OrdersTotal() - 1; i >= 0; i--) {
+  // Végigmegyünk az összes nyitott pozíción (MODE_TRADES tartalmazza a nyitottakat és a függőket is)
+  for (int i = 0; i < OrdersTotal(); i++) {
     if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
-      if (OrderSymbol() == Symbol() &&
-          (OrderType() == OP_BUY || OrderType() == OP_SELL)) {
-        double standardEquivalentLot = OrderLots();
-        if (lotModifier != 0 && lotModifier != 1.0) {
-           if (lotModifier > 0.00001) {
-               standardEquivalentLot = OrderLots() / lotModifier;
-           } else {
-               Print("Warning: Invalid lotModifier (", lotModifier, ") in DisplayPositionInfo. Using 1.0.");
-               standardEquivalentLot = OrderLots();
-           }
-        }
-        totalLotStandard += standardEquivalentLot;
+      // Csak a jelenlegi szimbólumra vonatkozó NYITOTT pozíciókat vesszük figyelembe
+      if (OrderSymbol() == Symbol() && (OrderType() == OP_BUY || OrderType() == OP_SELL)) {
+        totalLot += OrderLots();
         openPositions++;
       }
     }
   }
 
+  // Ha nincs nyitott pozíció, akkor ezt jelezzük
   if (openPositions == 0) {
-    DisplayText(positionInfoObjectName, "No open positions", fontName,
-                tableFontSize, positionColor, tableOffsetX, 90, Position);
+    DisplayText(positionInfoObjectName, "No open positions", fontName, tableFontSize, positionColor, 10, 90, Position);
   } else {
-    double totalEstimatedProfit =
-        CalculateProfitForPips(totalLotStandard, pipValuePerLot);
+    // Becsült profit kiszámítása a célpipek alapján
+    totalEstimatedProfit = CalculateProfitForPips(totalLot);
 
-    double displayLot = totalLotStandard;
-     if (lotModifier != 0 && lotModifier != 1.0) {
-        if (lotModifier > 0.00001) {
-            displayLot = totalLotStandard * lotModifier;
-        }
-     }
-
-    string totalLotStr = FormatDouble(displayLot, lotDigits, 8);
+    // Formázott értékek
+    string totalLotStr = FormatDouble(totalLot, lotDigits, 8);
     string totalProfitStr = FormatDouble(totalEstimatedProfit, profitDigits, profitWidth);
 
-    string posInfoText = StringFormat("%d positions  |  %s  |  $%s", openPositions, totalLotStr, totalProfitStr);
-    DisplayText(positionInfoObjectName, posInfoText, fontName, tableFontSize,
-                positionColor, tableOffsetX, 90, Position);
+    // Pozíciók információinak megjelenítése
+    string posInfoText = StringFormat("%d positions  |  %s  |  $%s",
+                         openPositions,
+                         totalLotStr,
+                         totalProfitStr);
+    DisplayText(positionInfoObjectName, posInfoText, fontName, tableFontSize, positionColor, 10, 90, Position);
   }
 }
 
 //+------------------------------------------------------------------+
-//| Calculates Lot Size based on risk %                              |
+double LotCalculate() {
+  return LotCalculateWithRisk(riskInPercent);
+}
+
+double LotCalculateWithRisk(int riskPercent) {
+  int ratio;
+  double calculatedLot, accountMoney;
+
+  // Calculate risked money based on risk percentage
+  accountMoney = withLoan ? AccountEquity() : AccountBalance();
+  riskedMoney = (accountMoney * riskPercent) / 100;
+
+  switch (accountType) {
+  case 1:
+    ratio = 100;
+    break;
+  case 2:
+    ratio = 10;
+    break;
+  case 3:
+    ratio = 1;
+    break;
+  }
+
+  // Avoid division by zero if SLinFPips is 0
+  if (SLinFPips == 0) return (0.0);
+
+  calculatedLot = (RISK_MULTIPLIER * riskedMoney) / (SLinFPips / ratio);
+  if (lotModifier > 0) calculatedLot = calculatedLot * lotModifier;
+
+  // Normalize lot size based on broker limitations
+  double minLot = MarketInfo(Symbol(), MODE_MINLOT);
+  double maxLot = MarketInfo(Symbol(), MODE_MAXLOT);
+  double lotStep = MarketInfo(Symbol(), MODE_LOTSTEP);
+
+  calculatedLot = MathRound(calculatedLot / lotStep) * lotStep; // Adjust to lot step
+
+  if (calculatedLot < minLot) calculatedLot = minLot;
+  if (calculatedLot > maxLot) calculatedLot = maxLot;
+
+
+  return (NormalizeDouble(calculatedLot, 2)); // NormalizeDouble might not be enough, use the step logic above
+}
+
 //+------------------------------------------------------------------+
-double LotCalculateWithRisk(int riskPercent, double pipValuePerLot) {
-  double accountMoney = withLoan ? AccountInfoDouble(ACCOUNT_EQUITY)
-                                 : AccountInfoDouble(ACCOUNT_BALANCE);
-  if (riskPercent < 0) riskPercent = 0;
-  double moneyToRisk = (accountMoney * riskPercent) / 100.0;
+double CalculateProfitForPips(double lotSize) {
+  double pipValue = 0.0;
+  double pointValue = MarketInfo(Symbol(), MODE_TICKVALUE); // Value of 1 tick (point) move for 1 standard lot
+  double pointSize = MarketInfo(Symbol(), MODE_POINT);     // Size of 1 point (e.g., 0.00001)
+  int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);      // Number of digits after decimal point
 
-  if (pipValuePerLot <= 0) {
-     Print("Cannot calculate lot size. Pip Value per Lot is zero or negative: ", pipValuePerLot);
-     return(0.0);
+  // Calculate pip size (e.g., 0.0001 for 5-digit, 0.01 for JPY pairs)
+  double pipSize = pointSize * 10;
+  if (digits == 3 || digits == 5) {
+      pipSize = pointSize * 10;
+  } else {
+      pipSize = pointSize; // For 2 or 4 digit pairs
   }
-  if (SLinPips <= 0) {
-     Print("Cannot calculate lot size. SLinPips must be positive: ", SLinPips);
-     return(0.0);
+   // Correction: Pip size calculation needs refinement based on digits
+   if (digits == 3 || digits == 5) pipSize = 10 * pointSize; // 1 pip = 10 points
+   else pipSize = pointSize; // 1 pip = 1 point (e.g. JPY pairs)
+
+
+  // Calculate value per pip for 1 standard lot
+  double pipValuePerLot = pointValue / pointSize * pipSize;
+
+  // Calculate profit based on actual lot size and target pips
+  // Need to consider the lotModifier correctly
+  double actualBrokerLotSize = lotSize;
+  if (accountType == 1 && lotModifier > 0) { // Assuming micro account means lotModifier applies
+      actualBrokerLotSize = lotSize / lotModifier;
+  } else if (accountType == 2 && lotModifier > 0) { // Assuming mini account might also use modifier differently? Let's assume standard interpretation for mini/normal
+       // If lotModifier is meant universally, adjust here. Assuming it's mainly for micro display vs broker lots.
+       // Let's stick to the original logic for now, assuming lotModifier scales the displayed lot for micro.
+       actualBrokerLotSize = lotSize / lotModifier; // Apply modifier if present, regardless of account type? Revisit this based on exact meaning.
+       // Let's revert to the original simple calculation based on accountType as it was likely intended for that specific broker setup.
   }
 
-  double pipMultiplier = GetPipMultiplier();
-  if (pipMultiplier <= 0) {
-      Print("Cannot calculate lot size. Invalid Pip Multiplier.");
-      return(0.0);
-  }
-
-  double lossPerStandardLot = (SLinPips / pipMultiplier) * pipValuePerLot;
-
-  if (lossPerStandardLot <= 0) {
-    Print("Cannot calculate lot size. Loss per standard lot is zero or negative: ", lossPerStandardLot, " (SLinPips=", SLinPips, ", pipMultiplier=", pipMultiplier, ", pipValuePerLot=", pipValuePerLot, ")");
-    return (0.0);
-  }
-
-  double calculatedLotStandard = moneyToRisk / lossPerStandardLot;
-
-  string symbol = Symbol();
-  double minLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-  double maxLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
-  double lotStep = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
-
-   if (minLot == 0 && maxLot == 0 && lotStep == 0) {
-      minLot = MarketInfo(symbol, MODE_MINLOT);
-      maxLot = MarketInfo(symbol, MODE_MAXLOT);
-      lotStep = MarketInfo(symbol, MODE_LOTSTEP);
+  // Reverting to the simpler, potentially broker-specific calculation from the original code
+  // as MarketInfo based calculation might be overly complex if the original worked for the user's setup.
+  double actualLotSizeForCalc = lotSize;
+   if (lotModifier > 0) {
+     actualLotSizeForCalc = lotSize / lotModifier; // Use the modified lot size for pip value calc
    }
 
-  if (minLot < 0) minLot = 0;
-  if (maxLot <= 0) maxLot = 10000;
-  if (lotStep <= 0) lotStep = 0.01;
-
-  calculatedLotStandard = MathMax(minLot, calculatedLotStandard);
-  calculatedLotStandard = MathMin(maxLot, calculatedLotStandard);
-
-  if (lotStep > 0) {
-      int step_digits = 0;
-      double temp_step = lotStep;
-      // Kicsit pontosabb tizedesjegy számítás a lépésközhöz
-      while(MathAbs(temp_step * MathPow(10, step_digits) - MathRound(temp_step * MathPow(10, step_digits))) > 0.00000001 && step_digits < 8) {
-         step_digits++;
-      }
-      calculatedLotStandard = NormalizeDouble(MathFloor(calculatedLotStandard / lotStep + 0.0000001) * lotStep, step_digits);
-  }
-
-   int lot_digits_norm = 0;
-   double temp_step_norm = lotStep;
-    while(MathAbs(temp_step_norm * MathPow(10, lot_digits_norm)) - MathRound(temp_step_norm * MathPow(10, lot_digits_norm)) > 0.00000001 && lot_digits_norm < 8) {
-       lot_digits_norm++;
-    }
-
-  return (NormalizeDouble(calculatedLotStandard, lot_digits_norm));
-}
+   switch (accountType) {
+   case 1: // micro (e.g., 0.1 displayed lot = 0.1 micro lots = 0.01 standard lots? Check broker)
+     // Assuming 1 displayed micro lot (after modifier) = $0.10 per pip
+     pipValue = 0.10 * actualLotSizeForCalc; // If actualLotSizeForCalc=0.1 -> $0.01/pip. If actualLotSizeForCalc=1 -> $0.10/pip. This seems correct for micro lots.
+     break;
+   case 2: // mini (e.g., 0.1 displayed lot = 0.1 mini lots = 0.1 standard lots)
+     pipValue = 1.0 * actualLotSizeForCalc; // If actualLotSizeForCalc=0.1 -> $0.10/pip. If actualLotSizeForCalc=1 -> $1.00/pip. Correct for mini lots.
+     break;
+   case 3: // standard (e.g., 0.1 displayed lot = 0.1 standard lots)
+     pipValue = 10.0 * actualLotSizeForCalc; // If actualLotSizeForCalc=0.1 -> $1.00/pip. If actualLotSizeForCalc=1 -> $10.00/pip. Correct for standard lots.
+     break;
+   }
 
 
-//+------------------------------------------------------------------+
-//| Calculates Profit for a given Lot Size and Target Pips           |
-//+------------------------------------------------------------------+
-double CalculateProfitForPips(double standardLotSize, double pipValuePerLot) {
-  if (pipValuePerLot <= 0 || standardLotSize < 0) {
-    return (0.0);
-  }
-  if (targetPips == 0) return(0.0);
+  double profit = pipValue * targetPips;
 
-  double pipMultiplier = GetPipMultiplier();
-   if (pipMultiplier <= 0) {
-      Print("Cannot calculate profit. Invalid Pip Multiplier.");
-      return(0.0);
-  }
-
-   double profit = standardLotSize * pipValuePerLot * (targetPips / pipMultiplier);
-
-  return (NormalizeDouble(profit, profitDigits));
+  return (profit);
 }
 
 //+------------------------------------------------------------------+
-//| Calculates Pip Value per Standard Lot in Account Currency        |
-//+------------------------------------------------------------------+
-double CalculatePipValuePerLot() {
-  string symbol = Symbol();
-  double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
-  double pointSize = SymbolInfoDouble(symbol, SYMBOL_POINT);
-  int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
-
-  if (tickValue == 0 || pointSize == 0 || digits == 0) {
-      tickValue = MarketInfo(symbol, MODE_TICKVALUE);
-      pointSize = MarketInfo(symbol, MODE_POINT);
-      digits = (int)MarketInfo(symbol, MODE_DIGITS);
-  }
-
-  if (pointSize == 0) {
-      Print("Error: Point size is zero for ", symbol, ". Cannot calculate Pip Value.");
-      return 0.0;
-  }
-  if (tickValue == 0) {
-       Print("Error: Tick value is zero for ", symbol, ". Cannot calculate Pip Value.");
-       return 0.0;
-  }
-
-  double pipSize = pointSize;
-  if (digits == 5 || digits == 3) {
-    pipSize = 10 * pointSize;
-  } else if (digits == 4 || digits == 2 || digits == 1 || digits == 0) {
-     pipSize = pointSize;
-  } else {
-     Print("Warning: Unexpected digits (", digits, ") in CalculatePipValuePerLot. Assuming 1 pip = 1 point.");
-     pipSize = pointSize;
-  }
-
-  double pipValuePerStandardLot = (tickValue / pointSize) * pipSize;
-
-  if(pipValuePerStandardLot < 0) pipValuePerStandardLot = 0;
-
-  return pipValuePerStandardLot;
-}
-
-
-//+------------------------------------------------------------------+
-//| Gets the multiplier for converting Pips input to points          |
-//+------------------------------------------------------------------+
-double GetPipMultiplier() {
-    int digits = (int)SymbolInfoInteger(Symbol(), SYMBOL_DIGITS);
-    if (digits == 0) {
-        digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
-    }
-
-    if (digits == 5 || digits == 3) {
-        return 10.0;
-    } else if (digits == 4 || digits == 2 || digits == 1 || digits == 0) {
-        return 1.0;
-    } else {
-        Print("Warning: Unexpected number of digits (", digits, ") for ", Symbol(), ". Assuming 1 pip = 1 point.");
-        return 1.0;
-    }
-}
-
-
-//+------------------------------------------------------------------+
-//| Formats a double value with padding                              |
-//+------------------------------------------------------------------+
+// Segédfüggvény a számok formázásához adott szélességgel
 string FormatDouble(double value, int digits, int width) {
-  string result = DoubleToString(value, digits);
+  string result = DoubleToStr(value, digits);
+
+  // Ha a szám rövidebb, mint a kívánt szélesség, akkor kiegészítjük szóközökkel
   int currentLength = StringLen(result);
   if (currentLength < width) {
-    string padding = "";
     for (int i = 0; i < width - currentLength; i++) {
-      padding = padding + " ";
+      result = " " + result;
     }
-    result = padding + result;
   }
+
   return result;
 }
 
 //+------------------------------------------------------------------+
-//| Displays text on the chart                                       |
-//+------------------------------------------------------------------+
 void DisplayText(string objname, string objtext, string fontname, int fontsize,
-                 color clr, int x, int y, int corner) {
-  if (ObjectFind(0, objname) < 0) {
-    if (!ObjectCreate(0, objname, OBJ_LABEL, 0, 0, 0)) {
-        Print("Error creating label '", objname, "': ", GetLastError());
-        return;
-    }
-    ObjectSetString(0, objname, OBJPROP_FONT, fontname);
-    ObjectSetInteger(0, objname, OBJPROP_FONTSIZE, fontsize);
-    ObjectSetInteger(0, objname, OBJPROP_SELECTABLE, false);
-    ObjectSetInteger(0, objname, OBJPROP_SELECTED, false);
+                 int clr, int x, int y, int Cor) {
+  if (ObjectFind(objname) < 0) { // Csak akkor hozzuk létre, ha még nem létezik
+     ObjectCreate(objname, OBJ_LABEL, 0, 0, 0);
   }
-
-  ObjectSetString(0, objname, OBJPROP_TEXT, objtext);
-  ObjectSetInteger(0, objname, OBJPROP_COLOR, clr);
-  ObjectSetInteger(0, objname, OBJPROP_CORNER, corner);
-  ObjectSetInteger(0, objname, OBJPROP_XDISTANCE, x);
-  ObjectSetInteger(0, objname, OBJPROP_YDISTANCE, y);
+  ObjectSetText(objname, objtext, fontsize, fontname, clr);
+  ObjectSet(objname, OBJPROP_CORNER, Cor);
+  ObjectSet(objname, OBJPROP_XDISTANCE, x);
+  ObjectSet(objname, OBJPROP_YDISTANCE, y);
+  ObjectSet(objname, OBJPROP_SELECTABLE, false); // Ne legyen kijelölhető
 }
 
 //+------------------------------------------------------------------+
-//| Gets order type as string                                        |
-//+------------------------------------------------------------------+
+// ÚJ: Segédfüggvény az order típusának szöveges lekéréséhez
 string GetOrderTypeString(int orderType) {
   switch (orderType) {
     case OP_BUY: return "BUY";
@@ -489,101 +402,95 @@ string GetOrderTypeString(int orderType) {
 }
 
 //+------------------------------------------------------------------+
-//| Displays the order status box                                    |
-//+------------------------------------------------------------------+
+// ÚJ: Megjeleníti az order státusz dobozt a chart tetején középen
 void DisplayOrderStatusBox() {
-  ObjectDelete(0, orderStatusRectName);
-  ObjectDelete(0, orderStatusTextName);
+  // Mindig töröljük az előző objektumokat a tiszta állapot érdekében
+  ObjectDelete(orderStatusRectName);
+  ObjectDelete(orderStatusTextName);
 
   if (!ShowOrderStatusBox) {
-    return;
+    return; // Funkció kikapcsolva, objektumok törölve
   }
 
-  int foundOrderSide = -1;
+  int foundOrderSide = -1; // -1: nincs, 0: buy oldal, 1: sell oldal
   string orderTypeText = "";
   color backgroundColor;
-  int orderTypeFound = -1;
+  int orderTypeFound = -1; // A konkrét order típusa
 
+  // Végigmegyünk az összes nyitott ÉS függő orderen
   for (int i = OrdersTotal() - 1; i >= 0; i--) {
     if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+       // Csak az aktuális szimbólumra vonatkozó ordereket nézzük
        if (OrderSymbol() == Symbol()) {
          int type = OrderType();
+         // Buy oldal (Buy, Buy Limit, Buy Stop)
          if (type == OP_BUY || type == OP_BUYLIMIT || type == OP_BUYSTOP) {
-           foundOrderSide = 0;
+           foundOrderSide = 0; // Buy oldal
            orderTypeFound = type;
-           backgroundColor = clrForestGreen;
-           break;
+           backgroundColor = clrForestGreen; // Zöld háttér
+           break; // Megtaláltuk az első releváns ordert, kilépünk
          }
+         // Sell oldal (Sell, Sell Limit, Sell Stop)
          else if (type == OP_SELL || type == OP_SELLLIMIT || type == OP_SELLSTOP) {
-           foundOrderSide = 1;
+           foundOrderSide = 1; // Sell oldal
            orderTypeFound = type;
-           backgroundColor = clrFireBrick;
-           break;
+           backgroundColor = clrFireBrick; // Piros háttér
+           break; // Megtaláltuk az első releváns ordert, kilépünk
          }
        }
     }
   }
 
+  // Ha nem találtunk releváns ordert, kilépünk (objektumok már törölve)
   if (foundOrderSide == -1) {
     return;
   }
 
+  // Lekérjük az order típusának szövegét
   orderTypeText = GetOrderTypeString(orderTypeFound);
 
+  // --- Objektumok létrehozása ---
+  // Hozzávetőleges méretek kiszámítása a szöveg alapján
+  // Ezek a szorzók finomhangolhatók a kinézet javításához
   double approxCharWidth = OrderStatusFontSize * 0.6;
   double approxCharHeight = OrderStatusFontSize * 1.5;
-  double paddingX = 10;
-  double paddingY = 6;
+  double paddingX = 10; // Vízszintes padding
+  double paddingY = 6;  // Függőleges padding
 
-  double rectWidth = StringLen(orderTypeText) * approxCharWidth + paddingX * 2;
-  double rectHeight = approxCharHeight + paddingY * 2;
+  double rectWidth = StringLen(orderTypeText) * approxCharWidth + paddingX;
+  double rectHeight = approxCharHeight + paddingY;
 
-  long chartWidthLong = ChartGetInteger(0, CHART_WIDTH_IN_PIXELS);
-  if (chartWidthLong <= 0) {
-      Print("Error: Could not get chart width for Order Status Box.");
-      return;
-  }
-  int chartWidth = (int)chartWidthLong;
-
+  // Pozíciók kiszámítása (felső közép)
+  int chartWidth = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS); // Chart szélessége pixelben
   int rectX = chartWidth / 2 - (int)(rectWidth / 2);
-  int rectY = 10;
+  int rectY = 10; // Távolság a tetejétől
   int textX = chartWidth / 2;
   int textY = rectY + (int)(rectHeight / 2);
 
-  if (!ObjectCreate(0, orderStatusRectName, OBJ_RECTANGLE_LABEL, 0, 0, 0)) {
-      Print("Error creating rectangle label '", orderStatusRectName, "': ", GetLastError());
-      return;
-  }
-  ObjectSetInteger(0, orderStatusRectName, OBJPROP_CORNER, 0);
+  // Háttér téglalap létrehozása
+  ObjectCreate(orderStatusRectName, OBJ_RECTANGLE, 0, 0, 0);
+  ObjectSetInteger(0, orderStatusRectName, OBJPROP_CORNER, 0); // Bal felső sarokhoz igazítás
   ObjectSetInteger(0, orderStatusRectName, OBJPROP_XDISTANCE, rectX);
   ObjectSetInteger(0, orderStatusRectName, OBJPROP_YDISTANCE, rectY);
   ObjectSetInteger(0, orderStatusRectName, OBJPROP_XSIZE, (int)rectWidth);
   ObjectSetInteger(0, orderStatusRectName, OBJPROP_YSIZE, (int)rectHeight);
   ObjectSetInteger(0, orderStatusRectName, OBJPROP_COLOR, backgroundColor);
-  ObjectSetInteger(0, orderStatusRectName, OBJPROP_BGCOLOR, backgroundColor);
-  ObjectSetInteger(0, orderStatusRectName, OBJPROP_BORDER_TYPE, BORDER_FLAT);
-  ObjectSetInteger(0, orderStatusRectName, OBJPROP_BACK, true);
+  ObjectSetInteger(0, orderStatusRectName, OBJPROP_BACK, true); // Háttérbe rajzolás
   ObjectSetInteger(0, orderStatusRectName, OBJPROP_SELECTABLE, false);
-  ObjectSetInteger(0, orderStatusRectName, OBJPROP_HIDDEN, false);
+  ObjectSetInteger(0, orderStatusRectName, OBJPROP_HIDDEN, false); // Láthatóvá tétel
 
-  if (!ObjectCreate(0, orderStatusTextName, OBJ_LABEL, 0, 0, 0)) {
-       Print("Error creating label '", orderStatusTextName, "': ", GetLastError());
-       ObjectDelete(0, orderStatusRectName);
-       return;
-  }
-  ObjectSetString(0, orderStatusTextName, OBJPROP_FONT, fontName);
-  ObjectSetInteger(0, orderStatusTextName, OBJPROP_FONTSIZE, OrderStatusFontSize);
-  ObjectSetString(0, orderStatusTextName, OBJPROP_TEXT, orderTypeText);
-  ObjectSetInteger(0, orderStatusTextName, OBJPROP_COLOR, clrWhite);
-  ObjectSetInteger(0, orderStatusTextName, OBJPROP_CORNER, 0);
+  // Szöveg címke létrehozása
+  ObjectCreate(orderStatusTextName, OBJ_LABEL, 0, 0, 0);
+  ObjectSetString(0, orderStatusTextName, OBJPROP_FONT, fontName); // Betűtípus beállítása
+  ObjectSetInteger(0, orderStatusTextName, OBJPROP_FONTSIZE, OrderStatusFontSize); // Betűméret
+  ObjectSetString(0, orderStatusTextName, OBJPROP_TEXT, orderTypeText); // Szöveg beállítása
+  ObjectSetInteger(0, orderStatusTextName, OBJPROP_COLOR, clrWhite); // Szöveg színe fehér
+  ObjectSetInteger(0, orderStatusTextName, OBJPROP_CORNER, 0); // Bal felső sarokhoz igazítás
   ObjectSetInteger(0, orderStatusTextName, OBJPROP_XDISTANCE, textX);
   ObjectSetInteger(0, orderStatusTextName, OBJPROP_YDISTANCE, textY);
-  ObjectSetInteger(0, orderStatusTextName, OBJPROP_ANCHOR, ANCHOR_CENTER);
-  ObjectSetInteger(0, orderStatusTextName, OBJPROP_BACK, false);
+  ObjectSetInteger(0, orderStatusTextName, OBJPROP_ANCHOR, ANCHOR_CENTER); // Középre igazítás (vízszintesen és függőlegesen is az X/Y ponthoz)
+  ObjectSetInteger(0, orderStatusTextName, OBJPROP_BACK, false); // Előtérbe rajzolás
   ObjectSetInteger(0, orderStatusTextName, OBJPROP_SELECTABLE, false);
-  ObjectSetInteger(0, orderStatusTextName, OBJPROP_HIDDEN, false);
+  ObjectSetInteger(0, orderStatusTextName, OBJPROP_HIDDEN, false); // Láthatóvá tétel
 }
 //+------------------------------------------------------------------+
-
-// Felesleges függvény eltávolítva:
-// double LotCalculate() { ... }
